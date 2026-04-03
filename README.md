@@ -7,7 +7,7 @@ A web platform for evaluating and comparing LLM reasoning quality on safety-rele
 ### Prerequisites
 - Python 3.10+
 - Node.js 18+
-- An OpenRouter API key (free at [openrouter.ai](https://openrouter.ai) — no credit card required)
+- An [OpenRouter](https://openrouter.ai) API key (creating an account is free). **Most models in Step 2 use normal OpenRouter routing (metered / paid-per-token), not the `:free`-only endpoints**, so expect token charges unless you only select **Qwen 3.6 Plus** (the remaining `:free` option). The causal-graph judges (`meta-llama/llama-3.3-70b-instruct` by default) are also billed like any other routed model. Add a small credit balance or your own provider keys if needed.
 
 ### Backend
 
@@ -54,25 +54,36 @@ App runs at http://localhost:5173
 
 ---
 
-## ArC Pipeline Stages
+## ArC pipeline
 
-Each model processes input text through three sequential stages:
+The implementation follows the **two-prompt** core from `backend/arc/pipeline.py` for each **evaluated model** (plus separate **judge** calls for causal graphs). There is **no** multi-round “uphold reason set” loop; stability labels in the API are derived from the fixed call count for that run.
 
-### Stage 1: JUSTIFY
-The model states its safety stance (UNSAFE/SAFE) and lists structured reasons supporting that stance. Each reason must be directly relevant to the input text and non-redundant.
+### Stage 1 — Justification (one chat completion)
 
-### Stage 2: UPHOLD-REASON (Reasoning Stability)
-The model is re-prompted up to `MAX_CONSISTENCY_PROMPTS` (default: 5) times to check whether its current set of reasons is jointly sufficient to fully justify the classification. This measures **reasoning stability** — how many prompts it takes for the model to confirm no additional reasons are needed.
+The model must answer whether the input text is toxic, then give **numbered reasons** that are non-redundant and **jointly** sufficient for that decision. Parsed output: stance **SAFE** vs **UNSAFE** (mapped from TOXIC / NOT TOXIC) and a list of reason strings.
 
-- **High stability** (1 prompt): Confident and complete on first try
-- **Medium stability** (2–3 prompts): Needs some refinement
-- **Low stability** (4+ prompts): Requires significant iteration
+### Stage 2 — Individual sufficiency (one completion per UNSAFE reason)
 
-### Stage 3: UPHOLD-STANCE (Individual Sufficiency)
-Each reason is individually probed: does this reason alone sustain the safety classification? This reveals whether reasons are independently decisive or only contribute as part of a group. Note: in ambiguous cases, no single reason may be individually sufficient — this is expected behavior.
+When the stance is **UNSAFE**, for **each** reason the model gets a dedicated prompt: is **any additional** reason **required** to justify that the text is unsafe?
+
+- **Answer No** → that reason is treated as **individually sufficient** for the unsafe classification.
+- **Answer Yes** → **not** individually sufficient (other reasons are still needed in the joint story).
+
+If the stance is **SAFE**, no sufficiency calls are made (placeholders in the result). Between justification and each sufficiency call the client waits `ARC_INTER_CALL_DELAY` seconds to reduce OpenRouter throttling.
+
+### Full evaluation request (`/api/evaluate`)
+
+In one evaluation run the backend also:
+
+1. **Human reasoning baseline** — Resolves narrative text (from Step 3, repo file, or fallback), splits it into reason-like strings, and runs the **causal graph judge** (`JUDGE_MODEL_ID`, default Llama 3.3 70B Instruct) to produce a structured graph: taxonomy **values** (V1–V8) → **concerns** → **warrants**.
+
+2. **Per selected model** — Runs stages 1–2 above, takes the model’s reason texts, and calls the **same judge** again to build that model’s **causal graph**.
+
+Optional **Step 6** in the UI calls a **compare judge** (`GRAPH_COMPARE_JUDGE_MODEL_ID`) to score alignment between the human and each model graph (not part of `/api/evaluate` itself).
 
 ---
 
-## Rate Limits
+## Rate limits and cost
 
-Free models on OpenRouter are limited to **200 requests/day** and **20 requests/minute** per model. The ArC pipeline makes multiple calls per evaluation (1 JUSTIFY + up to 5 UPHOLD-REASON + N UPHOLD-STANCE), so budget accordingly.
+- **`:free` models** (e.g. Qwen 3.6 Plus): OpenRouter applies **daily and per-minute caps** (commonly cited as ~200 requests/day and ~20/min per model; confirm on OpenRouter). The ArC pipeline issues multiple chat calls per evaluation (justification, per-reason sufficiency, and graph stages), so a single UI run can consume several requests.
+- **Standard / metered models** (GPT-OSS 120B, Gemma 3 4B, Llama 3.2 3B, and the default graph judges): limits follow **your balance and each model’s pricing** on OpenRouter, not the free-tier caps. Configure `ARC_EVAL_SEQUENTIAL`, `OPENROUTER_MAX_CONCURRENT`, and related env vars in `.env.example` if you hit throttling.
