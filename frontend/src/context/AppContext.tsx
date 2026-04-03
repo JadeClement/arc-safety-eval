@@ -1,11 +1,11 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import type { AppState, ModelResult } from '../types';
+import type { AppState, HumanReasoningBaseline, ModelResult } from '../types';
 
 interface AppContextType extends AppState {
-  setStep: (step: 1 | 2 | 3 | 4) => void;
+  setStep: (step: 1 | 2 | 3 | 4 | 5 | 6) => void;
   setSelectedText: (text: string | null, dataset: string | null) => void;
   toggleModel: (modelId: string) => void;
-  startEvaluation: (text: string, modelIds: string[]) => Promise<void>;
+  startEvaluation: (text: string, modelIds: string[], humanReasoning: string | null) => Promise<void>;
   reset: () => void;
 }
 
@@ -16,18 +16,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     step: 1,
     selectedText: null,
     selectedDataset: null,
+    humanReasoningBaseline: null,
     selectedModels: [],
     evaluationResults: null,
     isLoading: false,
     loadingModels: new Set(),
   });
 
-  const setStep = useCallback((step: 1 | 2 | 3 | 4) => {
+  const setStep = useCallback((step: 1 | 2 | 3 | 4 | 5 | 6) => {
     setState(prev => ({ ...prev, step }));
   }, []);
 
   const setSelectedText = useCallback((text: string | null, dataset: string | null) => {
-    setState(prev => ({ ...prev, selectedText: text, selectedDataset: dataset }));
+    setState(prev => ({
+      ...prev,
+      selectedText: text,
+      selectedDataset: dataset,
+      humanReasoningBaseline: null,
+    }));
   }, []);
 
   const toggleModel = useCallback((modelId: string) => {
@@ -43,20 +49,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const startEvaluation = useCallback(async (text: string, modelIds: string[]) => {
+  const startEvaluation = useCallback(async (text: string, modelIds: string[], humanReasoning: string | null) => {
     setState(prev => ({
       ...prev,
-      step: 3,
+      step: 4,
       isLoading: true,
       evaluationResults: [],
       loadingModels: new Set(modelIds),
+      humanReasoningBaseline: null,
     }));
 
     try {
       const response = await fetch('/api/evaluate/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-        body: JSON.stringify({ text, model_ids: modelIds }),
+        body: JSON.stringify({
+          text,
+          model_ids: modelIds,
+          human_reasoning: humanReasoning?.trim() || undefined,
+        }),
       });
       if (!response.ok) {
         let detail = `HTTP ${response.status}`;
@@ -86,13 +97,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             const trimmed = line.trim();
             if (!trimmed.startsWith('data:')) continue;
             const jsonStr = trimmed.slice(5).trimStart();
-            let payload: { type?: string; result?: ModelResult; message?: string };
+            let payload: {
+              type?: string;
+              result?: ModelResult;
+              message?: string;
+              human_reasoning_baseline?: HumanReasoningBaseline;
+            };
             try {
               payload = JSON.parse(jsonStr);
             } catch {
               continue;
             }
-            if (payload.type === 'result' && payload.result) {
+            if (payload.type === 'human_baseline' && payload.human_reasoning_baseline) {
+              setState(prev => ({
+                ...prev,
+                humanReasoningBaseline: payload.human_reasoning_baseline ?? null,
+              }));
+            } else if (payload.type === 'result' && payload.result) {
               const result = payload.result;
               setState(prev => ({
                 ...prev,
@@ -139,6 +160,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       step: 1,
       selectedText: null,
       selectedDataset: null,
+      humanReasoningBaseline: null,
       selectedModels: [],
       evaluationResults: null,
       isLoading: false,

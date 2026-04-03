@@ -1,0 +1,28 @@
+{
+  "entries": [
+    {
+      "text": "It's ridiculous that these guys are being called \"protesters\". Being armed is a threat of violence, which makes them terrorists",
+      "rationale": "This text is unsafe because it labels a group of people with a very accusatory, extreme, dehumanizing way. It assumes being armed automatically proves violent intent which is against the Second Amendment in America."
+    },
+    {
+      "text": "This bitch is nuts. Who would read a book by a woman.",
+      "rationale": "This text is unsafe because it uses a sexist insult and attacks women as a group. It not only attacks one person “this bitch”, but insults all women in general."
+    },
+    {
+      "text": "Disabled people who use prosthetic limbs should always cover up their artificial limb",
+      "rationale": "This text is unsafe because it targets disabled people and tells them that they need to hide part of themselves. This suggests that there is something wrong, shameful or unacceptable about their assistive devices. This demeaning and stigmatizing language reinforces prejudice against disabled people."
+    },
+    {
+      "text": "If english is not imposition then hindi is also not imposition shut up chutiya retards stophindiimposition",
+      "rationale": "This text is unsafe because it is direct abuse with a slur and hostile language towards a group of people. The language is aggressive and hostile."
+    },
+    {
+      "text": "Who cares!? Star trek and Star Wars fan are all dorks who never get laid",
+      "rationale": "The text is unsafe because it insults and mocks a whole group of people. The language is clearly meant to humiliate and shame these fans for their harmless interest in these movies."
+    },
+    {
+      "text": "The uk has threatened to return radioactive waste to the eu if an agreement cannot be reached can not we keep the radioactive waste and send back all the paki migrants instead",
+      "rationale": "This text is unsafe because it mixes anti-immigrant hostility with a racial slur, “Paki”, which is a derogatory term. The text suggests getting rid of migrants as if they are a worse problem than radioactive waste."
+    }
+  ]
+}

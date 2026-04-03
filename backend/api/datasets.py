@@ -2,11 +2,13 @@ import json
 import csv
 import io
 import uuid
-from typing import Optional
+from collections import Counter
+from typing import Union
+from urllib.request import Request, urlopen
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from sqlalchemy.orm import Session
 
-from backend.config import CURATED_DATASETS
+from backend.config import CURATED_DATASETS, DATASET_SAMPLE_MAX_CHARS
 from backend.db.session import get_db
 from backend.db.schema import UploadedDataset
 
@@ -14,6 +16,85 @@ router = APIRouter(prefix="/api/datasets", tags=["datasets"])
 
 # In-memory cache for loaded HuggingFace datasets
 _dataset_cache: dict = {}
+
+
+def _clip_sample_text(text: str) -> str:
+    t = (text or "").strip()
+    # ToxiGen (and similar) often store line breaks as literal backslash-n in the string
+    t = t.replace("\\n", "\n").replace("\\r\\n", "\n").replace("\\t", "\t")
+    if DATASET_SAMPLE_MAX_CHARS <= 0:
+        return t
+    return t[:DATASET_SAMPLE_MAX_CHARS]
+
+# Official HateXplain JSON (HuggingFace's script mis-handles these URLs with download_and_extract → gzip/UTF-8 errors).
+_HATEXPLAIN_DATA_URLS = (
+    "https://raw.githubusercontent.com/punyajoy/HateXplain/master/Data/post_id_divisions.json",
+    "https://raw.githubusercontent.com/punyajoy/HateXplain/master/Data/dataset.json",
+)
+
+
+def _http_json(url: str, timeout: float = 120.0) -> Union[dict, list]:
+    req = Request(url, headers={"User-Agent": "ArC-Safety-Eval/1.0"})
+    with urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _load_hatexplain_samples(sample_count: int) -> list[dict]:
+    """
+    Load HateXplain train split from upstream GitHub JSON (matches HF dataset content).
+    Labels on annotators are strings: hatespeech | normal | offensive.
+    """
+    divisions = _http_json(_HATEXPLAIN_DATA_URLS[0])
+    full = _http_json(_HATEXPLAIN_DATA_URLS[1])
+    samples: list[dict] = []
+    int_to_label = ("hatespeech", "normal", "offensive")
+
+    for tweet_id in divisions.get("train", []):
+        if len(samples) >= sample_count:
+            break
+        item = full.get(tweet_id)
+        if not item:
+            continue
+        tokens = item.get("post_tokens", [])
+        text = " ".join(tokens).strip() if isinstance(tokens, list) else str(tokens).strip()
+        if not text or len(text) <= 10:
+            continue
+
+        annotator_rows = item.get("annotators") or []
+        norm_labels: list[str] = []
+        for a in annotator_rows:
+            if not isinstance(a, dict):
+                continue
+            lb = a.get("label")
+            if lb is None:
+                continue
+            if isinstance(lb, int) and 0 <= lb < 3:
+                norm_labels.append(int_to_label[lb])
+            else:
+                s = str(lb).lower().strip()
+                if s in int_to_label:
+                    norm_labels.append(s)
+                elif s in ("hate", "hatespeech", "hs"):
+                    norm_labels.append("hatespeech")
+                elif s == "offensive":
+                    norm_labels.append("offensive")
+                elif s == "normal":
+                    norm_labels.append("normal")
+
+        if not norm_labels:
+            continue
+        majority = Counter(norm_labels).most_common(1)[0][0]
+        if majority not in ("hatespeech", "offensive"):
+            continue
+
+        samples.append(
+            {
+                "id": str(len(samples) + 1),
+                "text": _clip_sample_text(text),
+                "label": majority,
+            }
+        )
+    return samples
 
 
 def load_hf_dataset(dataset_config: dict) -> list[dict]:
@@ -41,51 +122,31 @@ def load_hf_dataset(dataset_config: dict) -> list[dict]:
                 if text and len(text) > 20 and toxicity >= 0.5:
                     samples.append({
                         "id": str(len(samples) + 1),
-                        "text": text[:1000],
+                        "text": _clip_sample_text(text),
                         "label": f"{toxicity:.2f}",
                     })
         elif name == "hatexplain":
-            # Only include hatespeech (0) or offensive (1), not normal (2)
-            ds = load_dataset(hf_id, split="train", trust_remote_code=True)
-            samples = []
-            for item in ds:
-                if len(samples) >= sample_count:
-                    break
-                tokens = item.get(text_field, [])
-                text = " ".join(tokens).strip() if isinstance(tokens, list) else str(tokens).strip()
-                if text and len(text) > 10:
-                    annotators = item.get(label_field, {})
-                    label_list = annotators.get("label", []) if isinstance(annotators, dict) else []
-                    # majority label: 0=hatespeech, 1=offensive, 2=normal
-                    if label_list:
-                        from collections import Counter
-                        majority = Counter(label_list).most_common(1)[0][0]
-                        if majority in (0, 1):  # unsafe only
-                            label_name = "hatespeech" if majority == 0 else "offensive"
-                            samples.append({
-                                "id": str(len(samples) + 1),
-                                "text": text[:1000],
-                                "label": label_name,
-                            })
+            # Avoid HuggingFace load_dataset("hatexplain"): builder uses download_and_extract on raw JSON → corrupt cache / UTF-8 errors.
+            samples = _load_hatexplain_samples(sample_count)
         elif name == "toxigen":
-            # Only include instances labelled as toxic/biased (label >= 2.5 on 0–5 scale, or label == 1)
+            # skg/toxigen-data: human toxicity score is in toxicity_human (1–5 mean), not "label".
             ds = load_dataset(hf_id, "annotated", split="train", trust_remote_code=True)
             samples = []
             for item in ds:
                 if len(samples) >= sample_count:
                     break
                 text = item.get(text_field, "").strip()
-                raw_label = item.get(label_field, 0)
+                raw_score = item.get("toxicity_human", item.get(label_field))
                 try:
-                    label_val = float(raw_label)
+                    score = float(raw_score)
                 except (TypeError, ValueError):
-                    label_val = 0
-                # ToxiGen annotated: toxicity_human is mean rating 0–5; >= 2.5 considered toxic
-                if text and len(text) > 10 and label_val >= 2.5:
+                    score = 0.0
+                # Treat mean human rating >= 2.5 as toxic / biased for curation (per ToxiGen practice)
+                if text and len(text) > 10 and score >= 2.5:
                     samples.append({
                         "id": str(len(samples) + 1),
-                        "text": text[:1000],
-                        "label": str(raw_label),
+                        "text": _clip_sample_text(text),
+                        "label": f"{score:.2f}",
                     })
         else:
             samples = []
@@ -172,7 +233,7 @@ async def upload_dataset(file: UploadFile = File(...), db: Session = Depends(get
                 if isinstance(row, dict) and "text" in row:
                     samples.append({
                         "id": str(i + 1),
-                        "text": str(row["text"])[:1000],
+                        "text": _clip_sample_text(str(row["text"])),
                         "label": str(row.get("label", "")),
                     })
         elif filename.endswith(".csv"):
@@ -182,7 +243,7 @@ async def upload_dataset(file: UploadFile = File(...), db: Session = Depends(get
                 if "text" in row:
                     samples.append({
                         "id": str(i + 1),
-                        "text": str(row["text"])[:1000],
+                        "text": _clip_sample_text(str(row["text"])),
                         "label": str(row.get("label", "")),
                     })
         else:

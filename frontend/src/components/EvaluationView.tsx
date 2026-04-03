@@ -49,7 +49,7 @@ export default function EvaluationView() {
       {!isLoading && evaluationResults && evaluationResults.length > 0 && (
         <div className="mb-5 flex justify-end">
           <button
-            onClick={() => setStep(4)}
+            onClick={() => setStep(5)}
             className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
           >
             View Argument Graph

@@ -26,8 +26,11 @@ export default function ModelOutputCard({ result, model, isLoading }: Props) {
             <p className="text-sm text-gray-400">Running ArC pipeline…</p>
           </div>
         ) : result?.error ? (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
-            <strong>{displayName} failed:</strong> {result.error}
+          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3.5 text-sm text-red-700 leading-relaxed">
+            <p className="m-0">
+              <strong className="font-semibold">{displayName} failed:</strong>{' '}
+              <span className="font-normal">{result.error}</span>
+            </p>
           </div>
         ) : result ? (
           <>

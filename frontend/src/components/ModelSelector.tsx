@@ -24,7 +24,7 @@ function formatContext(n: number) {
 }
 
 export default function ModelSelector() {
-  const { selectedModels, toggleModel, setStep, startEvaluation, selectedText } = useApp();
+  const { selectedModels, toggleModel, setStep, selectedText } = useApp();
   const [models, setModels] = useState<ModelConfig[]>([]);
   const [capWarning, setCapWarning] = useState(false);
 
@@ -57,7 +57,7 @@ export default function ModelSelector() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         {models.map(m => {
           const selected = selectedModels.includes(m.model_id);
           const colorClass = PROVIDER_COLORS[m.provider] || 'bg-gray-50 border-gray-200';
@@ -78,7 +78,12 @@ export default function ModelSelector() {
                 )}
               </div>
               <p className="font-semibold text-gray-800 text-sm mb-1">{m.display_name}</p>
-              <p className="text-xs text-gray-500 mb-2 line-clamp-2">{m.description}</p>
+              <p className="text-xs text-gray-500 mb-1 line-clamp-2">{m.description}</p>
+              {m.notice && (
+                <p className="text-[11px] leading-snug text-amber-800 bg-amber-50/80 border border-amber-100 rounded px-2 py-1.5 mb-2">
+                  {m.notice}
+                </p>
+              )}
               <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">
                 {formatContext(m.context_window)}
               </span>
@@ -95,13 +100,11 @@ export default function ModelSelector() {
           ← Back
         </button>
         <button
-          disabled={selectedModels.length === 0}
-          onClick={() => {
-            if (selectedText) startEvaluation(selectedText, selectedModels);
-          }}
+          disabled={selectedModels.length === 0 || !selectedText?.trim()}
+          onClick={() => setStep(3)}
           className="px-6 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-700 transition-colors"
         >
-          Compare Models →
+          Next: Human rationale →
         </button>
       </div>
     </div>

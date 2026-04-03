@@ -2,8 +2,10 @@ import { AppProvider, useApp } from './context/AppContext';
 import StepIndicator from './components/StepIndicator';
 import DatasetSelector from './components/DatasetSelector';
 import ModelSelector from './components/ModelSelector';
+import HumanRationaleStep from './components/HumanRationaleStep';
 import EvaluationView from './components/EvaluationView';
 import ArgumentGraphView from './components/ArgumentGraphView';
+import GraphConsistencyView from './components/GraphConsistencyView';
 
 function AppContent() {
   const { step } = useApp();
@@ -27,8 +29,10 @@ function AppContent() {
         <StepIndicator />
         {step === 1 && <DatasetSelector />}
         {step === 2 && <ModelSelector />}
-        {step === 3 && <EvaluationView />}
-        {step === 4 && <ArgumentGraphView />}
+        {step === 3 && <HumanRationaleStep />}
+        {step === 4 && <EvaluationView />}
+        {step === 5 && <ArgumentGraphView />}
+        {step === 6 && <GraphConsistencyView />}
       </main>
     </div>
   );

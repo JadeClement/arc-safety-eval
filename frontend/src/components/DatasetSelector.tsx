@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fetchDatasets, fetchSamples, fetchUploadedSamples, uploadDataset } from '../api/client';
+import { fetchDatasets, fetchSamples, fetchUploadedSamples, fetchHumanRationaleMatches, uploadDataset } from '../api/client';
 import { useApp } from '../context/AppContext';
 import type { DatasetMeta, TextSample } from '../types';
 
@@ -9,8 +9,49 @@ const DOMAIN_COLORS: Record<string, string> = {
   Bias: 'bg-amber-100 text-amber-700',
 };
 
+function HumanRationaleLegend() {
+  return (
+    <div
+      className="flex flex-wrap items-center gap-2 text-xs text-gray-600 mb-3 rounded-lg border border-gray-200 bg-white px-3 py-2"
+      role="note"
+    >
+      <span className="flex items-start gap-2 min-w-0">
+        <span className="mt-1 w-2 h-2 rounded-full bg-blue-500 shrink-0" aria-hidden />
+        <span>
+          <span className="font-medium text-gray-800">Blue dot</span>
+          {' — '}this text matches an entry in our human rationales file and has a saved human rationale (used on step 3).
+        </span>
+      </span>
+    </div>
+  );
+}
+
+function SampleTextWithRationaleDot({
+  text,
+  hasHumanRationale,
+  textClassName,
+}: {
+  text: string;
+  hasHumanRationale: boolean;
+  textClassName?: string;
+}) {
+  return (
+    <span className="flex items-start gap-2 min-w-0 w-full">
+      <span className="mt-1.5 w-4 shrink-0 flex justify-center" aria-hidden={!hasHumanRationale}>
+        {hasHumanRationale ? (
+          <span
+            className="w-2 h-2 rounded-full bg-blue-500"
+            title="Has a saved human rationale"
+          />
+        ) : null}
+      </span>
+      <span className={`min-w-0 flex-1 ${textClassName ?? ''}`}>{text}</span>
+    </span>
+  );
+}
+
 export default function DatasetSelector() {
-  const { setSelectedText, setStep, selectedText } = useApp();
+  const { setSelectedText, setStep } = useApp();
   const [tab, setTab] = useState<'curated' | 'upload'>('curated');
   const [datasets, setDatasets] = useState<DatasetMeta[]>([]);
   const [activeDataset, setActiveDataset] = useState<string | null>(null);
@@ -18,7 +59,7 @@ export default function DatasetSelector() {
   const [totalSamples, setTotalSamples] = useState(0);
   const [page, setPage] = useState(1);
   const [loadingSamples, setLoadingSamples] = useState(false);
-  const [pickedText, setPickedText] = useState<string | null>(null);
+  const [pickedSample, setPickedSample] = useState<TextSample | null>(null);
   const [expandedText, setExpandedText] = useState(false);
   const [uploadedSessionId, setUploadedSessionId] = useState<string | null>(null);
   const [uploadPreview, setUploadPreview] = useState<TextSample[]>([]);
@@ -26,11 +67,61 @@ export default function DatasetSelector() {
   const [uploadError, setUploadError] = useState('');
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [rationaleBySampleId, setRationaleBySampleId] = useState<Record<string, boolean>>({});
+  const [previewRationaleById, setPreviewRationaleById] = useState<Record<string, boolean>>({});
   const PAGE_SIZE = 20;
 
   useEffect(() => {
     fetchDatasets().then(setDatasets).catch(console.error);
   }, []);
+
+  useEffect(() => {
+    if (samples.length === 0) {
+      setRationaleBySampleId({});
+      return;
+    }
+    let cancelled = false;
+    fetchHumanRationaleMatches(samples.map(s => s.text))
+      .then(({ matches }) => {
+        if (cancelled) return;
+        const next: Record<string, boolean> = {};
+        samples.forEach((s, i) => {
+          next[s.id] = matches[i] ?? false;
+        });
+        setRationaleBySampleId(next);
+      })
+      .catch(e => {
+        console.error(e);
+        if (!cancelled) setRationaleBySampleId({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [samples]);
+
+  useEffect(() => {
+    if (uploadPreview.length === 0) {
+      setPreviewRationaleById({});
+      return;
+    }
+    let cancelled = false;
+    fetchHumanRationaleMatches(uploadPreview.map(s => s.text))
+      .then(({ matches }) => {
+        if (cancelled) return;
+        const next: Record<string, boolean> = {};
+        uploadPreview.forEach((s, i) => {
+          next[s.id] = matches[i] ?? false;
+        });
+        setPreviewRationaleById(next);
+      })
+      .catch(e => {
+        console.error(e);
+        if (!cancelled) setPreviewRationaleById({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [uploadPreview]);
 
   const loadSamples = useCallback(async (name: string, isUploaded: boolean, p: number) => {
     setLoadingSamples(true);
@@ -50,7 +141,7 @@ export default function DatasetSelector() {
   const handleDatasetClick = (name: string) => {
     setActiveDataset(name);
     setPage(1);
-    setPickedText(null);
+    setPickedSample(null);
     loadSamples(name, false, 1);
   };
 
@@ -73,7 +164,7 @@ export default function DatasetSelector() {
     if (!uploadedSessionId) return;
     setActiveDataset(uploadedSessionId);
     setPage(1);
-    setPickedText(null);
+    setPickedSample(null);
     loadSamples(uploadedSessionId, true, 1);
   };
 
@@ -128,7 +219,7 @@ export default function DatasetSelector() {
           ) : (
             <div>
               <button
-                onClick={() => { setActiveDataset(null); setSamples([]); setPickedText(null); }}
+                onClick={() => { setActiveDataset(null); setSamples([]); setPickedSample(null); }}
                 className="text-sm text-indigo-600 hover:underline mb-3 inline-flex items-center gap-1"
               >
                 ← Back to datasets
@@ -139,19 +230,24 @@ export default function DatasetSelector() {
                 </div>
               ) : (
                 <>
+                  <HumanRationaleLegend />
                   <div className="space-y-2 mb-4">
                     {samples.map(s => (
                       <button
                         key={s.id}
-                        onClick={() => setPickedText(s.text)}
+                        onClick={() => setPickedSample(s)}
                         className={`w-full text-left p-3 rounded-lg border text-sm transition-all ${
-                          pickedText === s.text
+                          pickedSample?.id === s.id
                             ? 'border-indigo-500 bg-indigo-50'
                             : 'border-gray-200 bg-white hover:border-gray-300'
                         }`}
                       >
-                        <span className="line-clamp-2 text-gray-700">{s.text}</span>
-                        {s.label && <span className="text-xs text-gray-400 mt-1 block">Label: {s.label}</span>}
+                        <SampleTextWithRationaleDot
+                          text={s.text}
+                          hasHumanRationale={!!rationaleBySampleId[s.id]}
+                          textClassName="text-gray-700 whitespace-pre-wrap break-words max-h-56 overflow-y-auto text-left"
+                        />
+                        {s.label && <span className="text-xs text-gray-400 mt-1 block pl-6">Label: {s.label}</span>}
                       </button>
                     ))}
                   </div>
@@ -222,10 +318,18 @@ export default function DatasetSelector() {
                 ✓ Uploaded: <strong>{uploadFilename}</strong>
               </div>
               <p className="text-sm text-gray-600 mb-2 font-medium">Preview (first 5 rows):</p>
+              <HumanRationaleLegend />
               <div className="space-y-2 mb-4">
                 {uploadPreview.map(s => (
-                  <div key={s.id} className="p-2 bg-gray-50 rounded border border-gray-200 text-sm text-gray-700 line-clamp-2">
-                    {s.text}
+                  <div
+                    key={s.id}
+                    className="p-2 bg-gray-50 rounded border border-gray-200 text-sm text-gray-700"
+                  >
+                    <SampleTextWithRationaleDot
+                      text={s.text}
+                      hasHumanRationale={!!previewRationaleById[s.id]}
+                      textClassName="text-gray-700 whitespace-pre-wrap break-words max-h-40 overflow-y-auto"
+                    />
                   </div>
                 ))}
               </div>
@@ -244,20 +348,27 @@ export default function DatasetSelector() {
                       <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      {samples.map(s => (
-                        <button
-                          key={s.id}
-                          onClick={() => setPickedText(s.text)}
-                          className={`w-full text-left p-3 rounded-lg border text-sm transition-all ${
-                            pickedText === s.text
-                              ? 'border-indigo-500 bg-indigo-50'
-                              : 'border-gray-200 bg-white hover:border-gray-300'
-                          }`}
-                        >
-                          <span className="line-clamp-2 text-gray-700">{s.text}</span>
-                        </button>
-                      ))}
+                    <div>
+                      <HumanRationaleLegend />
+                      <div className="space-y-2">
+                        {samples.map(s => (
+                          <button
+                            key={s.id}
+                            onClick={() => setPickedSample(s)}
+                            className={`w-full text-left p-3 rounded-lg border text-sm transition-all ${
+                              pickedSample?.id === s.id
+                                ? 'border-indigo-500 bg-indigo-50'
+                                : 'border-gray-200 bg-white hover:border-gray-300'
+                            }`}
+                          >
+                            <SampleTextWithRationaleDot
+                              text={s.text}
+                              hasHumanRationale={!!rationaleBySampleId[s.id]}
+                              textClassName="text-gray-700 whitespace-pre-wrap break-words max-h-56 overflow-y-auto text-left"
+                            />
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -268,29 +379,36 @@ export default function DatasetSelector() {
       )}
 
       {/* Selected text preview */}
-      {pickedText && (
-        <div className="mt-5 p-4 bg-indigo-50 border border-indigo-200 rounded-xl">
-          <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide mb-1">Selected text</p>
-          <p className="text-sm text-gray-700">
-            {expandedText ? pickedText : pickedText.slice(0, 200) + (pickedText.length > 200 ? '...' : '')}
-          </p>
-          {pickedText.length > 200 && (
-            <button
-              onClick={() => setExpandedText(!expandedText)}
-              className="text-xs text-indigo-600 mt-1 hover:underline"
-            >
-              {expandedText ? 'Show less' : 'Show more'}
-            </button>
-          )}
+      {pickedSample && (
+        <div className="mt-5 p-4 bg-indigo-50 border border-indigo-200 rounded-xl space-y-3">
+          <div>
+            <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide mb-1 flex items-center gap-2">
+              {rationaleBySampleId[pickedSample.id] ? (
+                <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" title="Has a saved human rationale" aria-hidden />
+              ) : null}
+              Selected text
+            </p>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">
+              {expandedText ? pickedSample.text : pickedSample.text.slice(0, 800) + (pickedSample.text.length > 800 ? '...' : '')}
+            </p>
+            {pickedSample.text.length > 800 && (
+              <button
+                onClick={() => setExpandedText(!expandedText)}
+                className="text-xs text-indigo-600 mt-1 hover:underline"
+              >
+                {expandedText ? 'Show less' : 'Show more'}
+              </button>
+            )}
+          </div>
         </div>
       )}
 
       <div className="mt-6 flex justify-end">
         <button
-          disabled={!pickedText}
+          disabled={!pickedSample}
           onClick={() => {
-            if (pickedText) {
-              setSelectedText(pickedText, activeDataset);
+            if (pickedSample) {
+              setSelectedText(pickedSample.text, activeDataset);
               setStep(2);
             }
           }}
