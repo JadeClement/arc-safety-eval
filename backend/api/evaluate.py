@@ -55,7 +55,7 @@ def _validate_evaluate_request(request: EvaluateRequest) -> str:
 async def _human_reasoning_baseline(text: str, human_reasoning: Optional[str] = None) -> dict:
     narrative, source = resolve_human_baseline_text(text, human_reasoning)
     reason_items = human_narrative_to_reasons(narrative)
-    graph = await run_causal_graph_async(reason_items)
+    graph = await run_causal_graph_async(reason_items, stance="UNSAFE")
     return {"text": narrative, "source": source, "causal_graph": graph}
 
 
@@ -68,7 +68,10 @@ async def evaluate(request: EvaluateRequest):
     async def run_single(model_id: str):
         result = await run_arc_pipeline_async(text, model_id)
         stabilized_reasons = [r["text"] for r in result.get("justification", [])]
-        result["causal_graph"] = await run_causal_graph_async(stabilized_reasons)
+        result["causal_graph"] = await run_causal_graph_async(
+            stabilized_reasons,
+            stance=result.get("stance") or "SAFE",
+        )
         return result
 
 
@@ -124,7 +127,10 @@ async def evaluate_stream(request: EvaluateRequest):
             try:
                 r = await run_arc_pipeline_async(text, model_id)
                 stabilized_reasons = [item["text"] for item in r.get("justification", [])]
-                r["causal_graph"] = await run_causal_graph_async(stabilized_reasons)
+                r["causal_graph"] = await run_causal_graph_async(
+                    stabilized_reasons,
+                    stance=r.get("stance") or "SAFE",
+                )
                 return r
             except Exception as e:
                 return {

@@ -50,6 +50,7 @@ export async function fetchValueTaxonomy(): Promise<{ taxonomy: ValueTaxonomyEnt
 export async function compareGraphConsistency(
   referenceGraph: CausalGraph,
   candidateGraph: CausalGraph,
+  options?: { humanLabel?: string; modelDisplayName?: string },
 ): Promise<GraphConsistency> {
   const res = await fetch('/api/graph-consistency/compare', {
     method: 'POST',
@@ -57,6 +58,8 @@ export async function compareGraphConsistency(
     body: JSON.stringify({
       reference_graph: referenceGraph,
       candidate_graph: candidateGraph,
+      human_label: options?.humanLabel ?? 'Human',
+      model_display_name: options?.modelDisplayName ?? 'Model',
     }),
   });
   if (!res.ok) {

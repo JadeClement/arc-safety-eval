@@ -81,6 +81,32 @@ export default function EvaluationView() {
           );
         })}
       </div>
+
+      <div className="mt-10 max-w-3xl mx-auto rounded-xl border border-gray-200 bg-gray-50/80 px-5 py-4">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">What this step is doing</p>
+        <p className="text-sm text-gray-700 leading-relaxed mb-3">
+          Each model run is split into <strong className="font-medium text-gray-900">two phases</strong>.
+        </p>
+        <ol className="text-sm text-gray-700 leading-relaxed space-y-3 list-decimal list-inside marker:text-gray-500">
+          <li>
+            <strong className="font-medium text-gray-900">Justification</strong> — We ask the model for sufficient,
+            diverse reasons that jointly support its stance on the text.
+          </li>
+          <li>
+            <strong className="font-medium text-gray-900">Consistency</strong> — We then probe each reason. For{' '}
+            <strong className="font-medium text-gray-900">UNSAFE</strong>, we test{' '}
+            <em>individual sufficiency</em>: could this reason alone support toxicity, or is more needed? For{' '}
+            <strong className="font-medium text-gray-900">SAFE</strong>, we test{' '}
+            <em>necessity</em>: we omit that reason and ask whether any <em>additional</em> reasons are still required
+            for the not-toxic verdict — if not, the omitted reason is labeled <strong>Not necessary</strong>; if so,{' '}
+            <strong>Necessary</strong>.
+          </li>
+        </ol>
+        <p className="text-xs text-gray-500 mt-3 leading-relaxed">
+          Per-reason results appear under <span className="font-medium text-gray-600">Self-consistency</span> in each
+          card.
+        </p>
+      </div>
     </div>
   );
 }

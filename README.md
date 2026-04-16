@@ -24,12 +24,14 @@ cp .env.example .env
 # Edit .env and set OPENROUTER_API_KEY=your_key_here
 ```
 
-Start the API:
+Start the API **from the repository root** (`arc-safety-eval/`, not `backend/`):
 ```bash
 uvicorn backend.main:app --reload
 ```
 
-API runs at http://localhost:8000
+API runs at http://localhost:8000. Start it **before** `npm run dev`; if nothing is listening on port 8000, the Vite proxy will fail (often as **`[vite] http proxy error: … socket hang up`**) when the UI loads `/api/...`.
+
+If macOS + Python 3.9 prints `resource_tracker: leaked semaphore` when you stop the process, it is usually from **`--reload`** (child process cleanup), not your app logic. Run without `--reload` for a quieter shutdown, or use Python 3.11+.
 
 ### Frontend
 
@@ -62,14 +64,14 @@ The implementation follows the **two-prompt** core from `backend/arc/pipeline.py
 
 The model must answer whether the input text is toxic, then give **numbered reasons** that are non-redundant and **jointly** sufficient for that decision. Parsed output: stance **SAFE** vs **UNSAFE** (mapped from TOXIC / NOT TOXIC) and a list of reason strings.
 
-### Stage 2 — Individual sufficiency (one completion per UNSAFE reason)
+### Stage 2 — Individual sufficiency (one completion per reason)
 
-When the stance is **UNSAFE**, for **each** reason the model gets a dedicated prompt: is **any additional** reason **required** to justify that the text is unsafe?
+For **each** reason, a dedicated prompt asks whether **any additional** reason is **still required** for the chosen stance:
 
-- **Answer No** → that reason is treated as **individually sufficient** for the unsafe classification.
-- **Answer Yes** → **not** individually sufficient (other reasons are still needed in the joint story).
+- **UNSAFE:** prompts reference toxic/unsafe justification (same semantics as before).
+- **SAFE:** prompts ask whether more reasons are needed to justify the **not-toxic** classification.
 
-If the stance is **SAFE**, no sufficiency calls are made (placeholders in the result). Between justification and each sufficiency call the client waits `ARC_INTER_CALL_DELAY` seconds to reduce OpenRouter throttling.
+**Answer No** → that reason is **individually sufficient** for the verdict; **Yes** → not sufficient alone. If there are zero parsed reasons, only the justification call runs. Between calls the client waits `ARC_INTER_CALL_DELAY` seconds to reduce OpenRouter throttling.
 
 ### Full evaluation request (`/api/evaluate`)
 

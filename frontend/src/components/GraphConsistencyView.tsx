@@ -4,7 +4,16 @@ import { useApp } from '../context/AppContext';
 import type { GraphConsistency, ModelConfig } from '../types';
 
 export default function GraphConsistencyView() {
-  const { selectedText, selectedModels, evaluationResults, humanReasoningBaseline, setStep, reset } = useApp();
+  const {
+    selectedText,
+    selectedModels,
+    evaluationResults,
+    humanReasoningBaseline,
+    graphConsistencyCache,
+    setStep,
+    setGraphConsistencyCache,
+    reset,
+  } = useApp();
   const [models, setModels] = useState<ModelConfig[]>([]);
   const [compareJudgeId, setCompareJudgeId] = useState<string | null>(null);
   const [scores, setScores] = useState<Record<string, GraphConsistency | null>>({});
@@ -25,6 +34,20 @@ export default function GraphConsistencyView() {
       return;
     }
 
+    const cacheOk =
+      graphConsistencyCache &&
+      selectedModels.length > 0 &&
+      selectedModels.every(mid => graphConsistencyCache[mid] !== undefined);
+
+    if (cacheOk) {
+      const fromCache: Record<string, GraphConsistency | null> = {};
+      for (const mid of selectedModels) {
+        fromCache[mid] = graphConsistencyCache![mid];
+      }
+      setScores(fromCache);
+      return;
+    }
+
     let cancelled = false;
     const next: Record<string, GraphConsistency | null> = {};
     for (const mid of selectedModels) {
@@ -33,27 +56,38 @@ export default function GraphConsistencyView() {
     setScores(next);
 
     (async () => {
+      const final: Record<string, GraphConsistency> = {};
       for (const modelId of selectedModels) {
         if (cancelled) return;
         const result = evaluationResults.find(r => r.model_id === modelId);
         const cand = result?.causal_graph;
         if (!cand || cand.error) {
-          setScores(prev => ({
-            ...prev,
-            [modelId]: { error: cand?.error ? `Model graph error: ${cand.error}` : 'No model graph for this run.' },
-          }));
+          const err: GraphConsistency = {
+            error: cand?.error ? `Model graph error: ${cand.error}` : 'No model graph for this run.',
+          };
+          final[modelId] = err;
+          setScores(prev => ({ ...prev, [modelId]: err }));
           continue;
         }
-        const out = await compareGraphConsistency(ref, cand);
+        const cfg = models.find(m => m.model_id === modelId);
+        const out = await compareGraphConsistency(ref, cand, {
+          humanLabel: 'Human',
+          modelDisplayName: cfg?.display_name ?? modelId,
+        });
         if (cancelled) return;
+        final[modelId] = out;
         setScores(prev => ({ ...prev, [modelId]: out }));
+      }
+      if (!cancelled) {
+        setGraphConsistencyCache(final);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [humanReasoningBaseline, evaluationResults, selectedModels]);
+    // graphConsistencyCache is read on each run (e.g. remount after step 5) but omitted from deps so filling the cache after compare does not retrigger fetches.
+  }, [humanReasoningBaseline, evaluationResults, selectedModels, setGraphConsistencyCache]);
 
   const displayText = selectedText ?? '';
   const truncated = displayText.length > 100 ? displayText.slice(0, 100) + '...' : displayText;

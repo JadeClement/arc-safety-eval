@@ -9,6 +9,10 @@ export default defineConfig({
       '/api': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
+        // Default Node proxy timeouts are short; dataset/HF routes can run long. Without this,
+        // the dev server often logs "socket hang up" while the backend is still working.
+        timeout: 180_000,
+        proxyTimeout: 180_000,
       },
     },
   },

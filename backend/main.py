@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.db.session import engine
 from backend.db.schema import Base
 from backend.api import datasets, models, evaluate, human_rationale, graph_consistency
-from backend.models.adapter import shutdown_shared_async_client
+from backend.models.adapter import shutdown_shared_async_client, shutdown_sync_http_client
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -16,6 +16,7 @@ Base.metadata.create_all(bind=engine)
 async def lifespan(app: FastAPI):
     yield
     await shutdown_shared_async_client()
+    shutdown_sync_http_client()
     engine.dispose()
 
 

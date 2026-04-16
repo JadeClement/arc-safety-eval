@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { fetchModels } from '../api/client';
 import { useApp } from '../context/AppContext';
 import type { CausalGraph, ModelConfig } from '../types';
-import { CausalFullGraph } from './CausalFullGraph';
+import { CausalSideBySideGraph } from './CausalSideBySideGraph';
 
 type SourceId = 'human' | string;
 
 export default function ArgumentGraphView() {
-  const { selectedText, selectedModels, evaluationResults, humanReasoningBaseline, setStep, reset } = useApp();
+  const { selectedText, selectedModels, evaluationResults, humanReasoningBaseline, humanRationaleProvided, setStep, reset } =
+    useApp();
   const [models, setModels] = useState<ModelConfig[]>([]);
   const [expanded, setExpanded] = useState(false);
   const [activeSource, setActiveSource] = useState<SourceId | null>(null);
@@ -31,7 +32,10 @@ export default function ArgumentGraphView() {
   }, [activeSource, humanReasoningBaseline, evaluationResults]);
 
   useEffect(() => {
-    const humanOk = !!humanReasoningBaseline?.causal_graph && !humanReasoningBaseline.causal_graph.error;
+    const humanOk =
+      humanRationaleProvided &&
+      !!humanReasoningBaseline?.causal_graph &&
+      !humanReasoningBaseline.causal_graph.error;
     const firstModel = selectedModels.find(mid => {
       const g = evaluationResults?.find(r => r.model_id === mid)?.causal_graph;
       return g && !g.error;
@@ -50,7 +54,7 @@ export default function ArgumentGraphView() {
     if (activeSource !== 'human' && !selectedModels.includes(activeSource)) {
       setActiveSource(humanOk ? 'human' : firstModel ?? null);
     }
-  }, [activeSource, humanReasoningBaseline, evaluationResults, selectedModels]);
+  }, [activeSource, humanRationaleProvided, humanReasoningBaseline, evaluationResults, selectedModels]);
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -92,11 +96,11 @@ export default function ArgumentGraphView() {
           <div className="text-right">
             <h2 className="text-lg font-bold text-gray-900">Argument Graph</h2>
             <p className="text-xs text-gray-400 mt-0.5 max-w-md">
-              Pick a source on the left — each source gets one combined diagram: values across the top, concerns and
-              warrants below, with links showing how warrants support concerns and concerns tie to value(s).
+              Pick a source on the left — values and claims with numbered links, checkboxes to filter values, hover for
+              warrants, and the full list below.
             </p>
           </div>
-          {humanReasoningBaseline && evaluationResults && evaluationResults.length > 0 && (
+          {humanRationaleProvided && humanReasoningBaseline && evaluationResults && evaluationResults.length > 0 && (
             <button
               type="button"
               onClick={() => setStep(6)}
@@ -113,24 +117,25 @@ export default function ArgumentGraphView() {
         <aside className="w-full lg:w-56 shrink-0 lg:sticky lg:top-4 space-y-2">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1">Source</p>
           <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden divide-y divide-gray-100">
-            {humanReasoningBaseline ? (
-              <button
-                type="button"
-                onClick={() => setActiveSource('human')}
-                className={`w-full text-left px-4 py-3 transition-colors ${
-                  activeSource === 'human'
-                    ? 'bg-amber-50/90 ring-2 ring-inset ring-amber-200/80'
-                    : 'hover:bg-gray-50'
-                }`}
-              >
-                <p className="font-semibold text-gray-900 text-sm">Human reasoning</p>
-                {humanReasoningBaseline.causal_graph?.error && (
-                  <p className="text-xs text-red-600 mt-1">Graph error</p>
-                )}
-              </button>
-            ) : (
-              <div className="px-4 py-3 text-sm text-gray-400 italic">No human baseline loaded.</div>
-            )}
+            {humanRationaleProvided &&
+              (humanReasoningBaseline ? (
+                <button
+                  type="button"
+                  onClick={() => setActiveSource('human')}
+                  className={`w-full text-left px-4 py-3 transition-colors ${
+                    activeSource === 'human'
+                      ? 'bg-amber-50/90 ring-2 ring-inset ring-amber-200/80'
+                      : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <p className="font-semibold text-gray-900 text-sm">Human reasoning</p>
+                  {humanReasoningBaseline.causal_graph?.error && (
+                    <p className="text-xs text-red-600 mt-1">Graph error</p>
+                  )}
+                </button>
+              ) : (
+                <div className="px-4 py-3 text-sm text-gray-400 italic">No human baseline loaded.</div>
+              ))}
 
             {selectedModels.map(modelId => {
               const result = evaluationResults?.find(r => r.model_id === modelId);
@@ -168,15 +173,22 @@ export default function ArgumentGraphView() {
             ) : activeGraph.values.length === 0 ? (
               <p className="text-sm text-gray-400 italic">This source did not implicate any values in the judge output.</p>
             ) : (
-              <CausalFullGraph graph={activeGraph} />
+              <CausalSideBySideGraph graph={activeGraph} />
             )}
           </div>
         </div>
       </div>
 
       <p className="text-center text-xs text-gray-400 mt-8 max-w-2xl mx-auto leading-relaxed">
-        Graph judge builds these structures. Run <strong className="font-medium text-gray-500">Step 6 — Graph consistency</strong> to
-        score alignment vs the human baseline with the compare judge.
+        {humanRationaleProvided ? (
+          <>
+            Graph judge builds these structures. Run{' '}
+            <strong className="font-medium text-gray-500">Step 6 — Graph consistency</strong> to score alignment vs the
+            human baseline with the compare judge.
+          </>
+        ) : (
+          <>Graph judge builds these model argument structures from the justification phase.</>
+        )}
       </p>
     </div>
   );

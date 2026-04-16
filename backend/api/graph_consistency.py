@@ -13,9 +13,19 @@ router = APIRouter(prefix="/api/graph-consistency", tags=["graph-consistency"])
 class CompareGraphsBody(BaseModel):
     reference_graph: dict[str, Any] = Field(..., description="Human baseline graph (values, concerns, warrants)")
     candidate_graph: dict[str, Any] = Field(..., description="Model graph (values, concerns, warrants)")
+    human_label: str = Field(default="Human", description="Name used in the compare explanation (e.g. Human)")
+    model_display_name: str = Field(
+        default="Model",
+        description="Model name used in the compare explanation (e.g. Llama 3.2 3B)",
+    )
 
 
 @router.post("/compare")
 async def compare_graphs(body: CompareGraphsBody):
     """Run the compare judge only when called (e.g. Step 6). Returns score 0–1 or error."""
-    return await run_graph_consistency_async(body.reference_graph, body.candidate_graph)
+    return await run_graph_consistency_async(
+        body.reference_graph,
+        body.candidate_graph,
+        human_label=body.human_label.strip() or "Human",
+        model_label=body.model_display_name.strip() or "Model",
+    )

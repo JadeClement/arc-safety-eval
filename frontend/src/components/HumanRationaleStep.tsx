@@ -74,11 +74,22 @@ export default function HumanRationaleStep() {
   return (
     <div className="max-w-3xl mx-auto">
       <h2 className="text-xl font-bold text-gray-800 mb-1">Step 3: Human rationale</h2>
-      <p className="text-sm text-gray-500 mb-5">
-        Write why this text is unsafe (for the human baseline graph). If your input matches{' '}
-        <code className="text-xs bg-gray-100 px-1 rounded">human_rationales.json</code>, the field is filled automatically;
-        you can edit it or replace it entirely.
+      <p className="text-sm text-gray-500 mb-3">
+        Please write your own rationale for why this text is unsafe to compare with the model&apos;s output. If your input matches one
+        we&apos;ve already written ourselves, the field is filled automatically but you can edit it or replace it entirely.
       </p>
+      <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 leading-snug">
+        <p className="font-semibold text-amber-950">What you enter here controls the human side of the UI</p>
+        <p className="mt-1.5 text-amber-950/90">
+          If you run evaluation with this box <span className="font-medium">empty</span>, steps 4 and 5 stay <span className="font-medium">model-only</span>: no human reasoning column or graph, and the{' '}
+          <span className="font-medium">Consistency</span> step does not appear. The server may still use an internal bundled or generic baseline for judging, but it is not shown in the app.
+        </p>
+        <p className="mt-2 text-amber-950/90">
+          To compare human vs model argument graphs and run graph consistency scoring, add <span className="font-medium">your own non-empty rationale</span> before you click Run evaluation (including leaving bundled text as-is if it was filled from{' '}
+          <code className="text-[11px] bg-white/80 border border-amber-200/80 px-1 rounded py-px">human_rationales.json</code>
+          ).
+        </p>
+      </div>
 
       <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4 shadow-sm">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Selected text</p>
@@ -141,9 +152,7 @@ export default function HumanRationaleStep() {
         />
       </label>
       <p className="text-xs text-gray-400 mt-2">
-        If you leave this empty and run evaluation, the server uses a bundled rationale when the text matches{' '}
-        <code className="text-xs bg-gray-100 px-1 rounded">human_rationales.json</code>, otherwise a short generic baseline.
-        If you type anything, that wording is used for the human baseline graph (edits count as your own unless unchanged from the file).
+        With <span className="font-medium text-gray-500">non-empty</span> text, that wording drives the human baseline graph and unlocks human views plus the consistency step. With an empty box, the server may still apply bundled or generic logic internally, but the app hides those human-facing surfaces as described above.
       </p>
 
       <div className="mt-6 flex items-center justify-between">

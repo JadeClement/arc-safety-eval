@@ -1,8 +1,12 @@
 export interface ReasonItem {
   reason_id: string;
   text: string;
+  /** UNSAFE: sufficiency probe. Null for SAFE runs. */
   individually_sufficient: boolean | null;
   sufficiency_explanation: string;
+  /** SAFE: necessity probe — omitted from the joint set, are further reasons required? Null for UNSAFE. */
+  reason_necessary?: boolean | null;
+  necessity_explanation?: string;
 }
 
 export interface SelfConsistency {
@@ -25,6 +29,8 @@ export interface ConcernNode {
 
 export interface WarrantNode {
   concern_id: string; // references ConcernNode.id
+  /** When set, this warrant applies only to the concern→value link (taxonomy V id). */
+  value_id?: string;
   text: string;
 }
 
@@ -91,4 +97,8 @@ export interface AppState {
   evaluationResults: ModelResult[] | null;
   isLoading: boolean;
   loadingModels: Set<string>;
+  /** Compare-judge scores keyed by model; cleared on reset / new evaluation. */
+  graphConsistencyCache: Record<string, GraphConsistency> | null;
+  /** True if the user entered non-empty rationale when starting the current evaluation (enables human UI + step 6). */
+  humanRationaleProvided: boolean;
 }

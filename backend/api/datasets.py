@@ -91,7 +91,7 @@ def _load_hatexplain_samples(sample_count: int) -> list[dict]:
             {
                 "id": str(len(samples) + 1),
                 "text": _clip_sample_text(text),
-                "label": majority,
+                "label": "",
             }
         )
     return samples
@@ -123,7 +123,7 @@ def load_hf_dataset(dataset_config: dict) -> list[dict]:
                     samples.append({
                         "id": str(len(samples) + 1),
                         "text": _clip_sample_text(text),
-                        "label": f"{toxicity:.2f}",
+                        "label": "",
                     })
         elif name == "hatexplain":
             # Avoid HuggingFace load_dataset("hatexplain"): builder uses download_and_extract on raw JSON → corrupt cache / UTF-8 errors.
@@ -146,7 +146,7 @@ def load_hf_dataset(dataset_config: dict) -> list[dict]:
                     samples.append({
                         "id": str(len(samples) + 1),
                         "text": _clip_sample_text(text),
-                        "label": f"{score:.2f}",
+                        "label": "",
                     })
         else:
             samples = []
@@ -161,7 +161,7 @@ def load_hf_dataset(dataset_config: dict) -> list[dict]:
             {
                 "id": str(i),
                 "text": f"Sample text {i} from {dataset_config['display_name']} (dataset loading failed: {str(e)[:100]})",
-                "label": "unknown",
+                "label": "",
             }
             for i in range(1, 11)
         ]
@@ -234,7 +234,7 @@ async def upload_dataset(file: UploadFile = File(...), db: Session = Depends(get
                     samples.append({
                         "id": str(i + 1),
                         "text": _clip_sample_text(str(row["text"])),
-                        "label": str(row.get("label", "")),
+                        "label": "",
                     })
         elif filename.endswith(".csv"):
             text_content = content.decode("utf-8")
@@ -244,7 +244,7 @@ async def upload_dataset(file: UploadFile = File(...), db: Session = Depends(get
                     samples.append({
                         "id": str(i + 1),
                         "text": _clip_sample_text(str(row["text"])),
-                        "label": str(row.get("label", "")),
+                        "label": "",
                     })
         else:
             raise HTTPException(status_code=400, detail="Only .csv and .json files are supported")

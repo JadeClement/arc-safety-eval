@@ -3,6 +3,7 @@ import json
 import os
 import threading
 import time
+from contextlib import contextmanager
 from typing import Optional
 
 import httpx
@@ -14,11 +15,39 @@ from backend.config import (
     APP_NAME,
 )
 
-# Queues parallel models so only N requests hit OpenRouter at once (reduces 429 when comparing 2–3 models).
-_openrouter_slots = threading.Semaphore(OPENROUTER_MAX_CONCURRENT)
+# Limit concurrent OpenRouter POSTs. Sync path uses a Condition (not threading.Semaphore) to avoid
+# spurious "leaked semaphore" warnings from multiprocessing.resource_tracker on macOS + Python 3.9.
+_sync_slots_available = OPENROUTER_MAX_CONCURRENT
+_sync_slot_cv = threading.Condition()
+_sync_http: Optional[httpx.Client] = None
+_sync_http_lock = threading.Lock()
+
 _openrouter_async_slots = asyncio.Semaphore(OPENROUTER_MAX_CONCURRENT)
 _async_http: Optional[httpx.AsyncClient] = None
 _async_http_lock = asyncio.Lock()
+
+
+@contextmanager
+def _sync_openrouter_slot():
+    global _sync_slots_available
+    with _sync_slot_cv:
+        while _sync_slots_available <= 0:
+            _sync_slot_cv.wait()
+        _sync_slots_available -= 1
+    try:
+        yield
+    finally:
+        with _sync_slot_cv:
+            _sync_slots_available += 1
+            _sync_slot_cv.notify()
+
+
+def _get_sync_client() -> httpx.Client:
+    global _sync_http
+    with _sync_http_lock:
+        if _sync_http is None:
+            _sync_http = httpx.Client(timeout=90.0)
+        return _sync_http
 
 def _parse_429_backoff_seconds() -> tuple[float, ...]:
     """
@@ -64,6 +93,17 @@ async def shutdown_shared_async_client() -> None:
                 await _async_http.aclose()
             finally:
                 _async_http = None
+
+
+def shutdown_sync_http_client() -> None:
+    """Close the process-wide httpx.Client used by synchronous OpenRouterAdapter.complete."""
+    global _sync_http
+    with _sync_http_lock:
+        if _sync_http is not None:
+            try:
+                _sync_http.close()
+            finally:
+                _sync_http = None
 
 
 def _openrouter_429_body_msg(response: httpx.Response) -> str:
@@ -216,12 +256,11 @@ class OpenRouterAdapter:
         payload = _openrouter_chat_payload(self.model_id, system_prompt, user_prompt)
 
         for attempt in range(RATE_LIMIT_MAX_RETRIES + 1):
-            with _openrouter_slots:
-                response = httpx.post(
+            with _sync_openrouter_slot():
+                response = _get_sync_client().post(
                     f"{OPENROUTER_BASE_URL}/chat/completions",
                     headers=headers,
                     json=payload,
-                    timeout=90.0,
                 )
 
             if response.status_code == 429:

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import StepIndicator from './components/StepIndicator';
 import DatasetSelector from './components/DatasetSelector';
@@ -8,7 +9,13 @@ import ArgumentGraphView from './components/ArgumentGraphView';
 import GraphConsistencyView from './components/GraphConsistencyView';
 
 function AppContent() {
-  const { step } = useApp();
+  const { step, humanRationaleProvided, setStep } = useApp();
+
+  useEffect(() => {
+    if (step === 6 && !humanRationaleProvided) {
+      setStep(5);
+    }
+  }, [step, humanRationaleProvided, setStep]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -32,7 +39,7 @@ function AppContent() {
         {step === 3 && <HumanRationaleStep />}
         {step === 4 && <EvaluationView />}
         {step === 5 && <ArgumentGraphView />}
-        {step === 6 && <GraphConsistencyView />}
+        {step === 6 && humanRationaleProvided && <GraphConsistencyView />}
       </main>
     </div>
   );

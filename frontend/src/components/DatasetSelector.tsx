@@ -247,7 +247,6 @@ export default function DatasetSelector() {
                           hasHumanRationale={!!rationaleBySampleId[s.id]}
                           textClassName="text-gray-700 whitespace-pre-wrap break-words max-h-56 overflow-y-auto text-left"
                         />
-                        {s.label && <span className="text-xs text-gray-400 mt-1 block pl-6">Label: {s.label}</span>}
                       </button>
                     ))}
                   </div>
@@ -279,6 +278,46 @@ export default function DatasetSelector() {
 
       {tab === 'upload' && (
         <div>
+          <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 space-y-2">
+            <p className="font-semibold">Toxic or unsafe text only</p>
+            <p className="text-xs text-amber-950/90 leading-relaxed">
+              This evaluator is built for <span className="font-medium">harmful, toxic, or otherwise unsafe content</span>, aligned with our curated datasets. Upload only lines that you intend to treat as unsafe for evaluation; benign or neutral lines will not match how the tool is designed to reason about the sample.
+            </p>
+          </div>
+          <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50/90 px-4 py-3 text-sm text-slate-700 space-y-3">
+            <p className="font-semibold text-slate-900">JSON format (UTF-8, filename ends in <code className="text-xs bg-white border border-slate-200 px-1 rounded py-0.5">.json</code>)</p>
+            <ul className="list-disc list-inside space-y-1.5 text-slate-700 leading-relaxed pl-0.5">
+              <li>
+                <span className="font-medium text-slate-800">Array of rows</span> —{' '}
+                <code className="text-xs bg-white border border-slate-200 px-1 rounded">[ &#123; &quot;text&quot;: &quot;...&quot; &#125;, ... ]</code>
+              </li>
+              <li>
+                <span className="font-medium text-slate-800">Wrapped in <code className="text-xs bg-white border px-1 rounded">data</code></span> —{' '}
+                <code className="text-xs bg-white border border-slate-200 px-1 rounded">&#123; &quot;data&quot;: [ ... ] &#125;</code>
+              </li>
+              <li>
+                <span className="font-medium text-slate-800">Single object</span> —{' '}
+                <code className="text-xs bg-white border border-slate-200 px-1 rounded">&#123; &quot;text&quot;: &quot;...&quot; &#125;</code>
+              </li>
+            </ul>
+            <p className="text-xs text-slate-600">
+              Each row must include only <code className="bg-white border border-slate-200 px-1 rounded">text</code> (string). Extra columns in CSV are ignored.
+            </p>
+            <p className="text-xs text-slate-600">
+              <a
+                href="/examples/upload-samples-example.json"
+                download="upload-samples-example.json"
+                className="text-indigo-600 font-medium hover:underline"
+              >
+                Download example file
+              </a>
+              {' — '}five toxic/unsafe examples. In the repo:{' '}
+              <code className="bg-white border border-slate-200 px-1 rounded text-[11px]">frontend/public/examples/upload-samples-example.json</code>.
+            </p>
+            <p className="text-xs text-slate-500 border-t border-slate-200 pt-2">
+              CSV: header row with a <code className="bg-white border px-1 rounded">text</code> column (required). Other columns are ignored.
+            </p>
+          </div>
           {!uploadedSessionId ? (
             <div>
               <div
@@ -307,7 +346,7 @@ export default function DatasetSelector() {
                     }}
                   />
                 </label>
-                <p className="text-xs text-gray-400 mt-3">Required column: <code className="bg-gray-100 px-1 rounded">text</code>. Optional: <code className="bg-gray-100 px-1 rounded">label</code></p>
+                <p className="text-xs text-gray-400 mt-3">Required column / field: <code className="bg-gray-100 px-1 rounded">text</code></p>
               </div>
               {uploading && <p className="text-sm text-indigo-600 mt-3 text-center">Uploading...</p>}
               {uploadError && <p className="text-sm text-red-600 mt-3">{uploadError}</p>}
@@ -318,19 +357,24 @@ export default function DatasetSelector() {
                 ✓ Uploaded: <strong>{uploadFilename}</strong>
               </div>
               <p className="text-sm text-gray-600 mb-2 font-medium">Preview (first 5 rows):</p>
-              <HumanRationaleLegend />
               <div className="space-y-2 mb-4">
                 {uploadPreview.map(s => (
-                  <div
+                  <button
                     key={s.id}
-                    className="p-2 bg-gray-50 rounded border border-gray-200 text-sm text-gray-700"
+                    type="button"
+                    onClick={() => setPickedSample(s)}
+                    className={`w-full text-left p-3 rounded-lg border text-sm transition-all ${
+                      pickedSample?.id === s.id
+                        ? 'border-indigo-500 bg-indigo-50'
+                        : 'border-gray-200 bg-white hover:border-gray-300'
+                    }`}
                   >
                     <SampleTextWithRationaleDot
                       text={s.text}
                       hasHumanRationale={!!previewRationaleById[s.id]}
-                      textClassName="text-gray-700 whitespace-pre-wrap break-words max-h-40 overflow-y-auto"
+                      textClassName="text-gray-700 whitespace-pre-wrap break-words max-h-40 overflow-y-auto text-left"
                     />
-                  </div>
+                  </button>
                 ))}
               </div>
               {!activeDataset && (
@@ -348,27 +392,24 @@ export default function DatasetSelector() {
                       <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
                     </div>
                   ) : (
-                    <div>
-                      <HumanRationaleLegend />
-                      <div className="space-y-2">
-                        {samples.map(s => (
-                          <button
-                            key={s.id}
-                            onClick={() => setPickedSample(s)}
-                            className={`w-full text-left p-3 rounded-lg border text-sm transition-all ${
-                              pickedSample?.id === s.id
-                                ? 'border-indigo-500 bg-indigo-50'
-                                : 'border-gray-200 bg-white hover:border-gray-300'
-                            }`}
-                          >
-                            <SampleTextWithRationaleDot
-                              text={s.text}
-                              hasHumanRationale={!!rationaleBySampleId[s.id]}
-                              textClassName="text-gray-700 whitespace-pre-wrap break-words max-h-56 overflow-y-auto text-left"
-                            />
-                          </button>
-                        ))}
-                      </div>
+                    <div className="space-y-2">
+                      {samples.map(s => (
+                        <button
+                          key={s.id}
+                          onClick={() => setPickedSample(s)}
+                          className={`w-full text-left p-3 rounded-lg border text-sm transition-all ${
+                            pickedSample?.id === s.id
+                              ? 'border-indigo-500 bg-indigo-50'
+                              : 'border-gray-200 bg-white hover:border-gray-300'
+                          }`}
+                        >
+                          <SampleTextWithRationaleDot
+                            text={s.text}
+                            hasHumanRationale={!!rationaleBySampleId[s.id]}
+                            textClassName="text-gray-700 whitespace-pre-wrap break-words max-h-56 overflow-y-auto text-left"
+                          />
+                        </button>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -407,10 +448,11 @@ export default function DatasetSelector() {
         <button
           disabled={!pickedSample}
           onClick={() => {
-            if (pickedSample) {
-              setSelectedText(pickedSample.text, activeDataset);
-              setStep(2);
-            }
+            if (!pickedSample) return;
+            const datasetForContext =
+              activeDataset ?? (tab === 'upload' ? uploadedSessionId : null);
+            setSelectedText(pickedSample.text, datasetForContext);
+            setStep(2);
           }}
           className="px-6 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-700 transition-colors"
         >

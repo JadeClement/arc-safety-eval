@@ -1,18 +1,19 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import type { AppState, HumanReasoningBaseline, ModelResult } from '../types';
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+import type { AppState, HumanReasoningBaseline, ModelResult, GraphConsistency } from '../types';
 
 interface AppContextType extends AppState {
   setStep: (step: 1 | 2 | 3 | 4 | 5 | 6) => void;
   setSelectedText: (text: string | null, dataset: string | null) => void;
   toggleModel: (modelId: string) => void;
   startEvaluation: (text: string, modelIds: string[], humanReasoning: string | null) => Promise<void>;
+  setGraphConsistencyCache: (cache: Record<string, GraphConsistency> | null) => void;
   reset: () => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
 
-export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AppState>({
+function createInitialAppState(): AppState {
+  return {
     step: 1,
     selectedText: null,
     selectedDataset: null,
@@ -21,10 +22,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     evaluationResults: null,
     isLoading: false,
     loadingModels: new Set(),
-  });
+    graphConsistencyCache: null,
+    humanRationaleProvided: false,
+  };
+}
 
-  const setStep = useCallback((step: 1 | 2 | 3 | 4 | 5 | 6) => {
-    setState(prev => ({ ...prev, step }));
+export function AppProvider({ children }: { children: React.ReactNode }) {
+  const [state, setState] = useState<AppState>(createInitialAppState);
+  const stepRef = useRef(state.step);
+  useEffect(() => {
+    stepRef.current = state.step;
+  }, [state.step]);
+
+  const setStep = useCallback((target: 1 | 2 | 3 | 4 | 5 | 6) => {
+    const current = stepRef.current;
+    if (current >= 4 && target <= 3) {
+      if (!window.confirm('Do you want to start again? Progress will be lost.')) {
+        return;
+      }
+      setState({ ...createInitialAppState(), step: target });
+      return;
+    }
+    setState(prev => ({ ...prev, step: target }));
+  }, []);
+
+  const setGraphConsistencyCache = useCallback((cache: Record<string, GraphConsistency> | null) => {
+    setState(prev => ({ ...prev, graphConsistencyCache: cache }));
   }, []);
 
   const setSelectedText = useCallback((text: string | null, dataset: string | null) => {
@@ -57,6 +80,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       evaluationResults: [],
       loadingModels: new Set(modelIds),
       humanReasoningBaseline: null,
+      graphConsistencyCache: null,
+      humanRationaleProvided: !!(humanReasoning?.trim()),
     }));
 
     try {
@@ -156,20 +181,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const reset = useCallback(() => {
-    setState({
-      step: 1,
-      selectedText: null,
-      selectedDataset: null,
-      humanReasoningBaseline: null,
-      selectedModels: [],
-      evaluationResults: null,
-      isLoading: false,
-      loadingModels: new Set(),
-    });
+    setState(createInitialAppState());
   }, []);
 
   return (
-    <AppContext.Provider value={{ ...state, setStep, setSelectedText, toggleModel, startEvaluation, reset }}>
+    <AppContext.Provider
+      value={{ ...state, setStep, setSelectedText, toggleModel, startEvaluation, setGraphConsistencyCache, reset }}
+    >
       {children}
     </AppContext.Provider>
   );

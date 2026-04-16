@@ -42,7 +42,7 @@ export default function ModelOutputCard({ result, model, isLoading }: Props) {
             />
 
             {/* Stage 2 — Self-Consistency: per-reason sufficiency + explanation */}
-            <SelfConsistencyPanel justification={result.justification} />
+            <SelfConsistencyPanel justification={result.justification} stance={result.stance} />
           </>
         ) : (
           <p className="text-sm text-gray-400 italic">Pending…</p>
